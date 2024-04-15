@@ -36,15 +36,16 @@ Danny has provided you with a sample of his overall customer data due to privacy
 
 #### 1. What is the total amount each customer spent at the restaurant?
 
-`sql
-SELECT 
-    s.customer_id, SUM(m.price) AS total_amount
-FROM
-    dannys_diner.sales AS s
-        JOIN
-    dannys_diner.menu AS m USING (product_id)
-GROUP BY s.customer_id;
-`
+````sql
+SELECT
+ 	 s.customer_id
+  	, SUM(price) as total_amount
+  from dannys_diner.sales as s 
+  left JOIN dannys_diner.menu as M
+  ON S.product_id = m.product_id
+  Group by s.customer_id
+  Order by total_amount DESC
+````
 #### Explaination:
 - Use *SUM* and *GROUP BY* to find out total_amount contributed by each customer.
 - Use *JOIN* to merge sales and menu tables as customer_id and price are from both tables.
@@ -64,11 +65,12 @@ GROUP BY s.customer_id;
 #### 2. How many days has each customer visited the restaurant?
 
 
-`sql
-SELECT customer_id, COUNT(DISTINCT order_date) AS total_visit_days
-FROM dannys_diner.sales AS s
-GROUP BY customer_id;
-`
+````sql
+SELECT customer_id, count (DISTINCT order_date) as total_days 
+  from dannys_diner.sales
+  group BY customer_id
+  order by total_days desc
+````
 #### Explaination:
 - Use *DISTINCT* and merge with *COUNT* to find out the total_visit_days for each customer.
 #### Answer:
@@ -84,18 +86,24 @@ GROUP BY customer_id;
 
 *
 #### 3. What was the first item from the menu purchased by each customer?
-`sql
-WITH sample_cte AS 
-(SELECT customer_id, product_name, order_date,DENSE_RANK() OVER(PARTITION BY s.customer_id ORDER BY s.order_date) AS rank
- FROM dannys_diner.sales AS s
- JOIN dannys_diner.menu AS m
- USING(product_id))
- 
- SELECT customer_id, product_name AS first_item_bought
+````sql
+WITH sample_cte as 
+(SELECT customer_id,
+ product_name,
+ order_date,DENSE_RANK()
+ over(PARTITION by s.customer_id
+      order BY s.order_date) AS "rank"
+ from dannys_diner.sales as s 
+ join dannys_diner.menu as m 
+ using (product_id))
+
+ SELECT customer_id,
+ product_name as first_item_bought
  FROM sample_cte
- WHERE rank = 1
- GROUP BY customer_id, product_name;
-`
+ where "rank"=1
+ GROUP BY customer_id,
+ product_name;
+````
 #### Explaination: 
 - Create a temp table sample_cte and use *Windows function* with *DENSE_RANK* to create a new column rank based on order_date.
 #### Answer:
@@ -111,15 +119,15 @@ WITH sample_cte AS
 - Customer C's first order is ramen.
 *
 ### 4. What is the most purchased item on the menu and how many times was it purchased by all customers?
-`sql
-SELECT m.product_name, COUNT(*) AS purchase_count
-FROM dannys_diner.sales s
-JOIN dannys_diner.menu m 
-USING(product_id)
-GROUP BY m.product_name
-ORDER BY purchase_count DESC
-LIMIT 1;
-`
+
+````sql
+SELECT product_name,count(s.product_id) as total_purchases 
+from dannys_diner.sales AS S
+join dannys_diner.menu AS M 
+on s.product_id = m.product_id
+group by product_name
+order by total_purchases desc LIMIT 1
+````
 #### Explaination:
 - *COUNT* number of product_id and *ORDER BY* purchase_count by descending order. 
 #### Answer:
@@ -130,20 +138,24 @@ LIMIT 1;
 *
 
 ### 5. Which item was the most popular for each customer?
-`sql
-WITH fav_item AS
-( SELECT s.customer_id, m.product_name, COUNT(s.product_id) AS order_count,
- DENSE_RANK() OVER(PARTITION BY s.customer_id ORDER BY COUNT(s.customer_id) DESC) AS rank
- 
- FROM dannys_diner.sales AS s
- JOIN dannys_diner.menu AS m
- USING(product_id)
- GROUP BY s.customer_id, m.product_name)
- 
- SELECT customer_id, product_name, order_count
- FROM fav_item
- WHERE rank = 1;
- `
+````sql
+SELECT s.customer_id,product_name, count(s.product_id) as number_of_products 
+from dannys_diner.menu as m 
+left join dannys_diner.sales as s
+on s.product_id = m.product_id
+group by customer_id, product_name
+order by number_of_products DESC, customer_id
+
+WITH sample_cte as 
+(SELECT customer_id,
+ product_name,
+ count(product_id),DENSE_RANK()
+ over(PARTITION by s.customer_id
+      order BY M.product_id) AS "rank"
+ from dannys_diner.sales as s 
+ join dannys_diner.menu as m 
+ using (product_id))
+````
  #### Explaination:
  - Create a fav_item and use *DENSE_RANK* to rank the order_count for each product by descending order for each customer.
 - Generate results where product rank = 1 only as the most popular product for each customer.
@@ -159,34 +171,25 @@ WITH fav_item AS
 
 *
 ### 6. Which item was purchased first by the customer after they became a member?
-`sql
-WITH cte AS (
-  SELECT
-    s.customer_id,
-    s.product_id,
-    m.join_date,
-    s.order_date,
-    DENSE_RANK() OVER(PARTITION BY s.customer_id ORDER BY s.order_date) AS rank
-  FROM
-    dannys_diner.sales AS s
-  JOIN
-    dannys_diner.members AS m
-    ON s.customer_id = m.customer_id
-  WHERE
-    s.order_date >= m.join_date
-)
-SELECT
-  s.customer_id,
-  s.order_date,
-  m2.product_name
-FROM
-  cte AS s
-JOIN
-  dannys_diner.menu AS m2
-  ON s.product_id = m2.product_id
-WHERE
-  rank = 1;
-`
+````sql
+WITH sample_CTE AS
+(select customer_id, 
+ product_id,
+ join_date,
+ order_date, 
+ DENSE_RANK() OVER(PARTITION by customer_id order by order_date) as RANK
+from dannys_diner.sales as s
+JOIN dannys_diner.members as m 
+ USING (customer_id)
+ WHERE order_date >= join_date)
+ 
+ 
+ SELECT s.customer_id, m2.product_name, s.order_date
+ FROM  sample_CTE AS s 
+ JOIN dannys_diner.menu as m2 
+ USING (product_id)
+where rank =1 
+````
  #### Explaination:
 
 - Create cte by using *windows function* and partitioning customer_id by ascending order_date. Then, filter order_date to be on or after join_date.
@@ -201,34 +204,24 @@ WHERE
 * 
 
 ### 7. Which item was purchased just before the customer became a member?
-`sql
-WITH cte AS (
-  SELECT
-    s.customer_id,
-    s.product_id,
-    m.join_date,
-    s.order_date,
-    DENSE_RANK() OVER(PARTITION BY s.customer_id ORDER BY s.order_date DESC) AS rank
-  FROM
-    dannys_diner.sales AS s
-  JOIN
-    dannys_diner.members AS m
-    ON s.customer_id = m.customer_id
-  WHERE
-    s.order_date < m.join_date
-)
-SELECT
-  s.customer_id,
-  s.order_date,
-  m2.product_name
-FROM
-  cte AS s
-JOIN
-  dannys_diner.menu AS m2
-  ON s.product_id = m2.product_id
-WHERE
-  rank = 1;
-  `
+````sql
+WITH sample_CTE AS
+(select customer_id, 
+ product_id,
+ join_date,
+ order_date, 
+ DENSE_RANK() OVER(PARTITION by customer_id order by order_date) as RANK
+from dannys_diner.sales as s
+JOIN dannys_diner.members as m 
+ USING (customer_id)
+ WHERE order_date < join_date)
+ 
+ SELECT s.customer_id, m2.product_name, s.order_date
+ FROM  sample_CTE AS s 
+ JOIN dannys_diner.menu as m2 
+ USING (product_id)
+where rank =1 
+````
   #### Explaination:
   - Create a cte to create new column rank by using *Windows function* and partitioning customer_id by descending order_date to find out the last order_date before customer becomes a member.
 - Filter order_date < join_date.
@@ -242,18 +235,20 @@ WHERE
 
 *
 ### 8. What is the total items and amount spent for each member before they became a member?
-
-`sql
+````sql
 SELECT 
- s.customer_id, SUM(m2.price),COUNT(DISTINCT m2.product_id)
- FROM dannys_diner.sales AS s
- JOIN dannys_diner.members AS m
- ON s.customer_id = m.customer_id
- JOIN dannys_diner.menu AS m2
- ON s.product_id = m2.product_id
- WHERE s.order_date < m.join_date
- GROUP BY s.customer_id;
- `
+s.customer_id,
+count(s.product_id) as total_items,
+sum(m.price) as total_sales
+from dannys_diner.sales as s
+JOIN dannys_diner.menu as m 
+ USING (product_id)
+JOIN dannys_diner.members as m2
+ USING (customer_id)
+WHERE order_date < join_date
+GROUP by s.customer_id
+order by s.customer_id
+````
  #### Explaination:
  - Filter order_date < join_date and perform a *COUNT* *DISTINCT* on product_id and *SUM* the price before becoming member.
 
